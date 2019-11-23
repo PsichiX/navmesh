@@ -1,0 +1,22 @@
+[package]
+name = "navmesh"
+version = "0.7.0"
+authors = ["Patryk 'PsichiX' Budzynski <psichix@gmail.com>"]
+edition = "2018"
+description = "Nav-Mesh path finder"
+license-file = "LICENSE"
+homepage = "https://github.com/PsichiX/navmesh"
+repository = "https://github.com/PsichiX/navmesh"
+documentation = "https://docs.rs/navmesh"
+readme = "README.md"
+
+[features]
+parallel = ["rayon"]
+
+[dependencies]
+typid  = "1"
+petgraph = "0.4"
+spade = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.1"
+rayon = { version = "1.0", optional = true }
