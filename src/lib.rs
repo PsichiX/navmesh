@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[macro_use]
+extern crate approx;
+
 mod nav_mesh;
 mod nav_vec3;
 
@@ -7,13 +11,14 @@ pub use nav_vec3::*;
 pub type Scalar = f64;
 
 pub(crate) const ZERO_TRESHOLD: Scalar = 1e-6;
+pub(crate) const SAME_DIRECTION: Scalar = 1.0 - 1.0e-6;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_project_point() {
+    fn test_raycast() {
         assert_eq!(
             NavVec3::raycast_plane(
                 (-1.0, -1.0, -1.0).into(),
@@ -55,6 +60,64 @@ mod tests {
             )
             .unwrap(),
             (1.0, 0.5, 0.0).into(),
+        );
+        assert_eq!(
+            NavVec3::raycast_triangle(
+                (0.0, 0.0, 1.0).into(),
+                (0.0, 0.0, -1.0).into(),
+                (0.0, -1.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (-1.0, 1.0, 0.0).into(),
+            )
+            .unwrap(),
+            (0.0, 0.0, 0.0).into(),
+        );
+        assert_eq!(
+            NavVec3::raycast_triangle(
+                (-1.0, -1.0, 1.0).into(),
+                (-1.0, -1.0, -1.0).into(),
+                (0.0, -1.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (-1.0, 1.0, 0.0).into(),
+            ),
+            None,
+        );
+        assert_eq!(
+            NavVec3::triangles_intersection(
+                (0.0, -1.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (-1.0, 1.0, 0.0).into(),
+                (0.0, 0.0, -1.0).into(),
+                (1.0, 0.0, 1.0).into(),
+                (-1.0, 0.0, 1.0).into(),
+            ),
+            Some(vec![(
+                ((0.5, 0.0, 0.0).into(), false),
+                ((-0.5, 0.0, 0.0).into(), false),
+                (0.0, 1.0, 0.0).into(),
+            )]),
+        );
+        assert_eq!(
+            NavVec3::triangles_intersection(
+                (0.0, -1.0, -1.0).into(),
+                (1.0, 1.0, -1.0).into(),
+                (-1.0, 1.0, -1.0).into(),
+                (0.0, 0.0, -1.0).into(),
+                (1.0, 0.0, 1.0).into(),
+                (-1.0, 0.0, 1.0).into(),
+            ),
+            None,
+        );
+        assert_eq!(
+            NavVec3::triangles_intersection(
+                (0.0, -1.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (-1.0, 1.0, 0.0).into(),
+                (0.0, -2.0, 0.0).into(),
+                (2.0, 2.0, 0.0).into(),
+                (-2.0, 2.0, 0.0).into(),
+            ),
+            Some(vec![]),
         );
     }
 
@@ -557,5 +620,139 @@ mod tests {
                 vec![(0, 10, 0), (10, 5, 0), (12, 4, 2),]
             );
         }
+    }
+
+    #[test]
+    fn test_thicken() {
+        let source = NavMesh::new(
+            vec![
+                [-10.0, -10.0, 0.0].into(),
+                [10.0, -10.0, 0.0].into(),
+                [10.0, 10.0, 0.0].into(),
+                [-10.0, 10.0, 0.0].into(),
+            ],
+            vec![[0, 1, 2].into(), [2, 3, 0].into()],
+        )
+        .unwrap();
+        let thickened = source.thicken(1.0).unwrap();
+        for (a, b) in source.vertices().iter().zip(thickened.vertices().iter()) {
+            assert_relative_eq!(*b, *a + NavVec3::new(0.0, 0.0, 1.0));
+        }
+
+        let source = NavMesh::new(
+            vec![
+                [-5.0, -5.0, -5.0].into(), // 0
+                [5.0, -5.0, -5.0].into(),  // 1
+                [5.0, 5.0, -5.0].into(),   // 2
+                [-5.0, 5.0, -5.0].into(),  // 3
+                [-5.0, -5.0, 5.0].into(),  // 4
+                [5.0, -5.0, 5.0].into(),   // 5
+                [5.0, 5.0, 5.0].into(),    // 6
+                [-5.0, 5.0, 5.0].into(),   // 7
+            ],
+            vec![
+                [2, 1, 0].into(),
+                [0, 3, 2].into(),
+                [4, 5, 6].into(),
+                [6, 7, 4].into(),
+                [0, 1, 5].into(),
+                [5, 4, 0].into(),
+                [1, 2, 6].into(),
+                [6, 5, 1].into(),
+                [2, 3, 7].into(),
+                [7, 6, 2].into(),
+                [3, 0, 4].into(),
+                [4, 7, 3].into(),
+            ],
+        )
+        .unwrap();
+        let thickened = source.thicken(1.0).unwrap();
+        let expected = vec![
+            NavVec3 {
+                x: -5.333333333333333,
+                y: -5.666666666666667,
+                z: -5.666666666666667,
+            },
+            NavVec3 {
+                x: 5.816496580927726,
+                y: -5.408248290463863,
+                z: -5.408248290463863,
+            },
+            NavVec3 {
+                x: 5.333333333333333,
+                y: 5.666666666666667,
+                z: -5.666666666666667,
+            },
+            NavVec3 {
+                x: -5.816496580927726,
+                y: 5.408248290463863,
+                z: -5.408248290463863,
+            },
+            NavVec3 {
+                x: -5.666666666666667,
+                y: -5.333333333333333,
+                z: 5.666666666666667,
+            },
+            NavVec3 {
+                x: 5.408248290463863,
+                y: -5.816496580927726,
+                z: 5.408248290463863,
+            },
+            NavVec3 {
+                x: 5.666666666666667,
+                y: 5.333333333333333,
+                z: 5.666666666666667,
+            },
+            NavVec3 {
+                x: -5.408248290463863,
+                y: 5.816496580927726,
+                z: 5.408248290463863,
+            },
+        ];
+        for (a, b) in expected.iter().zip(thickened.vertices().iter()) {
+            assert_relative_eq!(a, b);
+        }
+    }
+
+    #[test]
+    fn test_cut_holes() {
+        let navmesh = NavMesh::new(
+            vec![
+                [-10.0, -10.0, 0.0].into(),
+                [10.0, -10.0, 0.0].into(),
+                [10.0, 10.0, 0.0].into(),
+                [-10.0, 10.0, 0.0].into(),
+            ],
+            vec![[0, 1, 2].into(), [2, 3, 0].into()],
+        )
+        .unwrap();
+        let obstacle = NavMesh::new(
+            vec![
+                [-5.0, -5.0, -5.0].into(), // 0
+                [5.0, -5.0, -5.0].into(),  // 1
+                [5.0, 5.0, -5.0].into(),   // 2
+                [-5.0, 5.0, -5.0].into(),  // 3
+                [-5.0, -5.0, 5.0].into(),  // 4
+                [5.0, -5.0, 5.0].into(),   // 5
+                [5.0, 5.0, 5.0].into(),    // 6
+                [-5.0, 5.0, 5.0].into(),   // 7
+            ],
+            vec![
+                [2, 1, 0].into(),
+                [0, 3, 2].into(),
+                [4, 5, 6].into(),
+                [6, 7, 4].into(),
+                [0, 1, 5].into(),
+                [5, 4, 0].into(),
+                [1, 2, 6].into(),
+                [6, 5, 1].into(),
+                [2, 3, 7].into(),
+                [7, 6, 2].into(),
+                [3, 0, 4].into(),
+                [4, 7, 3].into(),
+            ],
+        )
+        .unwrap();
+        let navmesh = navmesh.cut_out_hole(&obstacle).unwrap();
     }
 }

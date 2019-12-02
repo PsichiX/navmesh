@@ -69,6 +69,16 @@ impl From<(u32, u32, u32)> for NavTriangle {
     }
 }
 
+impl From<[u32; 3]> for NavTriangle {
+    fn from(value: [u32; 3]) -> Self {
+        Self {
+            first: value[0],
+            second: value[1],
+            third: value[2],
+        }
+    }
+}
+
 /// Nav mesh area descriptor. Nav mesh area holds information about specific nav mesh triangle.
 #[repr(C)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
@@ -458,6 +468,123 @@ impl NavMesh {
         })
     }
 
+    pub fn thicken(&self, value: Scalar) -> NavResult<Self> {
+        let shifted = iter!(self.vertices)
+            .enumerate()
+            .map(|(i, v)| {
+                let (mut n, c) = iter!(self.triangles)
+                    .enumerate()
+                    .filter_map(|(j, t)| {
+                        if t.first == i as u32 || t.second == i as u32 || t.third == i as u32 {
+                            Some(self.spatials[j].normal)
+                        } else {
+                            None
+                        }
+                    })
+                    .fold((NavVec3::default(), 0), |a, v| (a.0 + v, a.1 + 1));
+                if c > 1 {
+                    n = n / c as Scalar;
+                }
+                *v + n.normalize() * value
+            })
+            .collect::<Vec<_>>();
+        Self::new(shifted, self.triangles.clone())
+    }
+
+    pub fn cut_out_hole(&self, other: &Self) -> NavResult<Self> {
+        fn aabb_collide(
+            (amin, amax): &(NavVec3, NavVec3),
+            (bmin, bmax): &(NavVec3, NavVec3),
+        ) -> bool {
+            amin.x < bmax.x
+                && amax.x > bmin.x
+                && amin.y < bmax.y
+                && amax.y > bmin.y
+                && amin.z < bmax.z
+                && amax.z > bmin.z
+        }
+
+        let source_aabb = iter!(self.vertices)
+            .skip(1)
+            .fold((self.vertices[0], self.vertices[0]), |a, v| {
+                (a.0.min(*v), a.1.max(*v))
+            });
+        let other_triangles_aabb = iter!(other.triangles)
+            .map(|t| {
+                let first = other.vertices[t.first as usize];
+                let second = other.vertices[t.second as usize];
+                let third = other.vertices[t.third as usize];
+                (first.min(second).min(third), first.max(second).max(third))
+            })
+            .collect::<Vec<_>>();
+        let other_triangles_in_range = iter!(other_triangles_aabb)
+            .enumerate()
+            .filter(|(_, aabb)| aabb_collide(aabb, &source_aabb))
+            .collect::<HashMap<_, _>>();
+        if other_triangles_in_range.is_empty() {
+            return Ok(self.clone());
+        }
+        let source_triangles_aabb = iter!(self.triangles)
+            .map(|t| {
+                let first = self.vertices[t.first as usize];
+                let second = self.vertices[t.second as usize];
+                let third = self.vertices[t.third as usize];
+                (first.min(second).min(third), first.max(second).max(third))
+            })
+            .collect::<Vec<_>>();
+        let triangles_in_range = iter!(source_triangles_aabb)
+            .enumerate()
+            .filter_map(|(i, source_aabb)| {
+                let result = iter!(other_triangles_in_range)
+                    .filter_map(|(j, other_aabb)| {
+                        if aabb_collide(source_aabb, other_aabb) {
+                            Some(*j)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if result.is_empty() {
+                    None
+                } else {
+                    Some((i, result))
+                }
+            })
+            .collect::<Vec<_>>();
+        let triangles_in_collision = iter!(triangles_in_range)
+            .filter_map(|(i, o)| {
+                let a = {
+                    let t = &self.triangles[*i];
+                    (
+                        self.vertices[t.first as usize],
+                        self.vertices[t.second as usize],
+                        self.vertices[t.third as usize],
+                    )
+                };
+                let segments = into_iter!(o)
+                    .filter_map(|j| {
+                        let b = {
+                            let t = &other.triangles[*j];
+                            (
+                                other.vertices[t.first as usize],
+                                other.vertices[t.second as usize],
+                                other.vertices[t.third as usize],
+                            )
+                        };
+                        NavVec3::triangles_intersection(a.0, a.1, a.2, b.0, b.1, b.2)
+                    })
+                    .collect::<Vec<_>>();
+                if segments.is_empty() {
+                    None
+                } else {
+                    Some((i, segments))
+                }
+            })
+            .collect::<Vec<_>>();
+        println!("=== COLLISIONS: {:#?}", triangles_in_collision);
+        unimplemented!()
+    }
+
     /// Nav mesh identifier.
     #[inline]
     pub fn id(&self) -> NavMeshID {
@@ -572,34 +699,20 @@ impl NavMesh {
         if (to - from).sqr_magnitude() < ZERO_TRESHOLD {
             return None;
         }
-        let start = if let Some(start) = self.find_closest_triangle(from, query) {
-            start
-        } else {
-            return None;
-        };
-        let end = if let Some(end) = self.find_closest_triangle(to, query) {
-            end
-        } else {
-            return None;
-        };
+        let start = self.find_closest_triangle(from, query)?;
+        let end = self.find_closest_triangle(to, query)?;
         let from = self.spatials[start].closest_point(from);
         let to = self.spatials[end].closest_point(to);
-        if let Some((triangles, _)) = self.find_path_triangles(start, end) {
-            if triangles.is_empty() {
-                return None;
-            } else if triangles.len() == 1 {
-                return Some(vec![from, to]);
-            }
-            match mode {
-                NavPathMode::Accuracy => {
-                    return Some(self.find_path_accuracy(from, to, &triangles));
-                }
-                NavPathMode::MidPoints => {
-                    return Some(self.find_path_midpoints(from, to, &triangles));
-                }
-            }
+        let (triangles, _) = self.find_path_triangles(start, end)?;
+        if triangles.is_empty() {
+            return None;
+        } else if triangles.len() == 1 {
+            return Some(vec![from, to]);
         }
-        None
+        match mode {
+            NavPathMode::Accuracy => Some(self.find_path_accuracy(from, to, &triangles)),
+            NavPathMode::MidPoints => Some(self.find_path_midpoints(from, to, &triangles)),
+        }
     }
 
     fn find_path_accuracy(&self, from: NavVec3, to: NavVec3, triangles: &[usize]) -> Vec<NavVec3> {
@@ -871,11 +984,7 @@ impl NavMesh {
         offset: Scalar,
     ) -> Option<(NavVec3, Scalar)> {
         let s = Self::project_on_path(path, point, offset);
-        if let Some(p) = Self::point_on_path(path, s) {
-            Some((p, s))
-        } else {
-            None
-        }
+        Some((Self::point_on_path(path, s)?, s))
     }
 
     /// Project point on nav mesh path.
