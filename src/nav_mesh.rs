@@ -45,6 +45,10 @@ pub enum Error {
     /// Trying to construct triangle with vertice index out of vertices list.
     /// (triangle index, local vertice index, global vertice index)
     TriangleVerticeIndexOutOfBounds(u32, u8, u32),
+    /// Could not serialize NavMesh. Contains serialization error string.
+    CouldNotSerializeNavMesh(String),
+    /// Could not deserialize NavMesh. Contains deserialization error string.
+    CouldNotDeserializeNavMesh(String),
 }
 
 /// Result data.
@@ -126,7 +130,7 @@ impl NavArea {
 }
 
 #[derive(Debug, Default, Copy, Clone, Eq, Serialize, Deserialize)]
-struct NavConnection(pub u32, pub u32);
+pub struct NavConnection(pub u32, pub u32);
 
 impl Hash for NavConnection {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -255,7 +259,7 @@ pub enum NavPathMode {
 }
 
 /// Nav mesh object used to find shortest path between two points.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct NavMesh {
     id: NavMeshID,
     vertices: Vec<NavVec3>,
@@ -270,6 +274,7 @@ pub struct NavMesh {
     spatials: Vec<NavSpatialObject>,
     // {triangle index: [(from, to)]}
     hard_edges: HashMap<usize, Vec<(NavVec3, NavVec3)>>,
+    origin: NavVec3,
 }
 
 impl NavMesh {
@@ -305,6 +310,8 @@ impl NavMesh {
     /// let mesh = NavMesh::new(vertices, triangles).unwrap();
     /// ```
     pub fn new(vertices: Vec<NavVec3>, triangles: Vec<NavTriangle>) -> NavResult<Self> {
+        let origin =
+            iter!(vertices).fold(NavVec3::default(), |a, v| a + *v) / vertices.len() as Scalar;
         let areas = iter!(triangles)
             .enumerate()
             .map(|(i, triangle)| {
@@ -465,7 +472,22 @@ impl NavMesh {
             rtree,
             spatials,
             hard_edges,
+            origin,
         })
+    }
+
+    pub fn deserialize(bytes: &[u8]) -> NavResult<Self> {
+        match bincode::deserialize(bytes) {
+            Ok(navmesh) => Ok(navmesh),
+            Err(error) => Err(Error::CouldNotDeserializeNavMesh(format!("{}", error))),
+        }
+    }
+
+    pub fn serialize(&self) -> NavResult<Vec<u8>> {
+        match bincode::serialize(self) {
+            Ok(bytes) => Ok(bytes),
+            Err(error) => Err(Error::CouldNotSerializeNavMesh(format!("{}", error))),
+        }
     }
 
     pub fn thicken(&self, value: Scalar) -> NavResult<Self> {
@@ -489,6 +511,14 @@ impl NavMesh {
             })
             .collect::<Vec<_>>();
         Self::new(shifted, self.triangles.clone())
+    }
+
+    pub fn scale(&self, value: NavVec3, origin: Option<NavVec3>) -> NavResult<Self> {
+        let origin = origin.unwrap_or(self.origin);
+        let vertices = iter!(self.vertices)
+            .map(|v| (*v - origin) * value + origin)
+            .collect::<Vec<_>>();
+        Self::new(vertices, self.triangles.clone())
     }
 
     pub fn cut_out_hole(&self, other: &Self) -> NavResult<Self> {
@@ -524,6 +554,7 @@ impl NavMesh {
         if other_triangles_in_range.is_empty() {
             return Ok(self.clone());
         }
+
         let source_triangles_aabb = iter!(self.triangles)
             .map(|t| {
                 let first = self.vertices[t.first as usize];
@@ -532,6 +563,10 @@ impl NavMesh {
                 (first.min(second).min(third), first.max(second).max(third))
             })
             .collect::<Vec<_>>();
+        if source_triangles_aabb.is_empty() {
+            return Ok(self.clone());
+        }
+
         let triangles_in_range = iter!(source_triangles_aabb)
             .enumerate()
             .filter_map(|(i, source_aabb)| {
@@ -551,37 +586,85 @@ impl NavMesh {
                 }
             })
             .collect::<Vec<_>>();
-        let triangles_in_collision = iter!(triangles_in_range)
+        if triangles_in_range.is_empty() {
+            return Ok(self.clone());
+        }
+
+        let triangles_segments = iter!(triangles_in_range)
             .filter_map(|(i, o)| {
-                let a = {
-                    let t = &self.triangles[*i];
-                    (
-                        self.vertices[t.first as usize],
-                        self.vertices[t.second as usize],
-                        self.vertices[t.third as usize],
-                    )
-                };
+                let t = &self.triangles[*i];
+                let a = [
+                    self.vertices[t.first as usize],
+                    self.vertices[t.second as usize],
+                    self.vertices[t.third as usize],
+                ];
                 let segments = into_iter!(o)
                     .filter_map(|j| {
                         let b = {
                             let t = &other.triangles[*j];
-                            (
+                            [
                                 other.vertices[t.first as usize],
                                 other.vertices[t.second as usize],
                                 other.vertices[t.third as usize],
-                            )
+                            ]
                         };
-                        NavVec3::triangles_intersection(a.0, a.1, a.2, b.0, b.1, b.2)
+                        NavVec3::triangles_intersection(a[0], a[1], a[2], b[0], b[1], b[2])
                     })
                     .collect::<Vec<_>>();
                 if segments.is_empty() {
                     None
-                } else {
+                } else if segments.len() == 1 {
                     Some((i, segments))
+                } else {
+                    let mut segment_connections = Vec::new();
+                    for (i, s1) in segments.iter().enumerate() {
+                        if let Some(r) = segments.iter().enumerate().find_map(|(j, s2)| {
+                            if i != j && (s2.0).0.same_as((s1.1).0) {
+                                Some((i, j))
+                            } else {
+                                None
+                            }
+                        }) {
+                            segment_connections.push(r);
+                        }
+                    }
+                    let start_index = (0..segments.len())
+                        .map(|i| {
+                            (
+                                i,
+                                segment_connections
+                                    .iter()
+                                    .filter(|(f, t)| i == *f || i == *t)
+                                    .count(),
+                            )
+                        })
+                        .find(|(i, c)| *c == 1 && segment_connections.iter().any(|(f, _)| f == i))
+                        .map(|v| v.0)
+                        .unwrap_or(0);
+                    let mut sorted = Vec::with_capacity(segments.len());
+                    sorted.push(segments[start_index]);
+                    let mut index = start_index;
+                    while sorted.len() < segments.len() {
+                        let found = segment_connections.iter().find(|(f, _)| *f == index);
+                        if let Some((_, to)) = found {
+                            index = *to;
+                            sorted.push(segments[index]);
+                        } else {
+                            break;
+                        }
+                    }
+                    Some((i, sorted))
                 }
             })
             .collect::<Vec<_>>();
-        println!("=== COLLISIONS: {:#?}", triangles_in_collision);
+        if triangles_segments.is_empty() {
+            return Ok(self.clone());
+        }
+        println!("=== TRIANGLES SEGMENTS: {:#?}", triangles_segments);
+
+        // TODO: create isles of holes by connecting triangles segments and use that isles to find
+        // triangles inside them that are not cut, but have to be removed.
+
         unimplemented!()
     }
 
@@ -589,6 +672,11 @@ impl NavMesh {
     #[inline]
     pub fn id(&self) -> NavMeshID {
         self.id
+    }
+
+    #[inline]
+    pub fn origin(&self) -> NavVec3 {
+        self.origin
     }
 
     /// Reference to list of nav mesh vertices points.
@@ -696,7 +784,7 @@ impl NavMesh {
         query: NavQuery,
         mode: NavPathMode,
     ) -> Option<Vec<NavVec3>> {
-        if (to - from).sqr_magnitude() < ZERO_TRESHOLD {
+        if from.same_as(to) {
             return None;
         }
         let start = self.find_closest_triangle(from, query)?;

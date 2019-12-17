@@ -11,7 +11,6 @@ pub use nav_vec3::*;
 pub type Scalar = f64;
 
 pub(crate) const ZERO_TRESHOLD: Scalar = 1e-6;
-pub(crate) const SAME_DIRECTION: Scalar = 1.0 - 1.0e-6;
 
 #[cfg(test)]
 mod tests {
@@ -87,15 +86,41 @@ mod tests {
                 (0.0, -1.0, 0.0).into(),
                 (1.0, 1.0, 0.0).into(),
                 (-1.0, 1.0, 0.0).into(),
-                (0.0, 0.0, -1.0).into(),
-                (1.0, 0.0, 1.0).into(),
-                (-1.0, 0.0, 1.0).into(),
+                (0.0, 0.0, -4.0).into(),
+                (4.0, 0.0, 4.0).into(),
+                (-4.0, 0.0, 4.0).into(),
             ),
-            Some(vec![(
-                ((0.5, 0.0, 0.0).into(), false),
-                ((-0.5, 0.0, 0.0).into(), false),
-                (0.0, 1.0, 0.0).into(),
-            )]),
+            Some((
+                ((0.5, 0.0, 0.0).into(), Some(NavConnection(0, 1))),
+                ((-0.5, 0.0, 0.0).into(), Some(NavConnection(2, 0))),
+                (0.0, -1.0, 0.0).into()
+            )),
+        );
+        assert_eq!(
+            NavVec3::triangles_intersection(
+                (0.0, -1.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (-1.0, 1.0, 0.0).into(),
+                (0.0, 0.0, -4.0).into(),
+                (4.0, 0.0, 4.0).into(),
+                (0.0, 0.0, 4.0).into(),
+            ),
+            Some((
+                ((0.5, 0.0, 0.0).into(), Some(NavConnection(0, 1))),
+                ((0.0, 0.0, 0.0).into(), None),
+                (0.0, -1.0, 0.0).into()
+            )),
+        );
+        assert_eq!(
+            NavVec3::triangles_intersection(
+                (0.0, -1.0, 0.0).into(),
+                (1.0, 1.0, 0.0).into(),
+                (-1.0, 1.0, 0.0).into(),
+                (0.0, -1.0, -4.0).into(),
+                (4.0, -1.0, 4.0).into(),
+                (0.0, -1.0, 4.0).into(),
+            ),
+            None,
         );
         assert_eq!(
             NavVec3::triangles_intersection(
@@ -117,7 +142,7 @@ mod tests {
                 (2.0, 2.0, 0.0).into(),
                 (-2.0, 2.0, 0.0).into(),
             ),
-            Some(vec![]),
+            None,
         );
     }
 
@@ -716,6 +741,19 @@ mod tests {
 
     #[test]
     fn test_cut_holes() {
+        // assert_eq!(
+        //     NavVec3::triangles_intersection(
+        //         (10.0, 10.0, 0.0).into(),
+        //         (-10.0, 10.0, 0.0).into(),
+        //         (-10.0, -10.0, 0.0).into(),
+        //         [5.0, -5.0, 5.0].into(),   // 5
+        //         [-5.0, -5.0, 5.0].into(),  // 4
+        //         [-5.0, -5.0, -5.0].into(), // 0
+        //     ),
+        //     None,
+        // );
+        // return;
+
         let navmesh = NavMesh::new(
             vec![
                 [-10.0, -10.0, 0.0].into(),
