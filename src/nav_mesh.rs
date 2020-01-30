@@ -357,7 +357,7 @@ impl NavMesh {
 
         // {edge: [triangle index]}
         let mut edges = HashMap::<NavConnection, Vec<usize>>::with_capacity(triangles.len() * 3);
-        for (index, triangle) in triangles.iter().enumerate() {
+        for (index, triangle) in iter!(triangles).enumerate() {
             let edge_a = NavConnection(triangle.first, triangle.second);
             let edge_b = NavConnection(triangle.second, triangle.third);
             let edge_c = NavConnection(triangle.third, triangle.first);
@@ -404,8 +404,7 @@ impl NavMesh {
             .map(|_| graph.add_node(()))
             .collect::<Vec<_>>();
         graph.extend_with_edges(
-            connections
-                .iter()
+            iter!(connections)
                 .map(|(conn, (w, _))| (nodes[conn.0 as usize], nodes[conn.1 as usize], w)),
         );
         let nodes_map = iter!(nodes).enumerate().map(|(i, n)| (*n, i)).collect();
@@ -476,20 +475,6 @@ impl NavMesh {
         })
     }
 
-    pub fn deserialize(bytes: &[u8]) -> NavResult<Self> {
-        match bincode::deserialize(bytes) {
-            Ok(navmesh) => Ok(navmesh),
-            Err(error) => Err(Error::CouldNotDeserializeNavMesh(format!("{}", error))),
-        }
-    }
-
-    pub fn serialize(&self) -> NavResult<Vec<u8>> {
-        match bincode::serialize(self) {
-            Ok(bytes) => Ok(bytes),
-            Err(error) => Err(Error::CouldNotSerializeNavMesh(format!("{}", error))),
-        }
-    }
-
     pub fn thicken(&self, value: Scalar) -> NavResult<Self> {
         let shifted = iter!(self.vertices)
             .enumerate()
@@ -519,153 +504,6 @@ impl NavMesh {
             .map(|v| (*v - origin) * value + origin)
             .collect::<Vec<_>>();
         Self::new(vertices, self.triangles.clone())
-    }
-
-    pub fn cut_out_hole(&self, other: &Self) -> NavResult<Self> {
-        fn aabb_collide(
-            (amin, amax): &(NavVec3, NavVec3),
-            (bmin, bmax): &(NavVec3, NavVec3),
-        ) -> bool {
-            amin.x < bmax.x
-                && amax.x > bmin.x
-                && amin.y < bmax.y
-                && amax.y > bmin.y
-                && amin.z < bmax.z
-                && amax.z > bmin.z
-        }
-
-        let source_aabb = iter!(self.vertices)
-            .skip(1)
-            .fold((self.vertices[0], self.vertices[0]), |a, v| {
-                (a.0.min(*v), a.1.max(*v))
-            });
-        let other_triangles_aabb = iter!(other.triangles)
-            .map(|t| {
-                let first = other.vertices[t.first as usize];
-                let second = other.vertices[t.second as usize];
-                let third = other.vertices[t.third as usize];
-                (first.min(second).min(third), first.max(second).max(third))
-            })
-            .collect::<Vec<_>>();
-        let other_triangles_in_range = iter!(other_triangles_aabb)
-            .enumerate()
-            .filter(|(_, aabb)| aabb_collide(aabb, &source_aabb))
-            .collect::<HashMap<_, _>>();
-        if other_triangles_in_range.is_empty() {
-            return Ok(self.clone());
-        }
-
-        let source_triangles_aabb = iter!(self.triangles)
-            .map(|t| {
-                let first = self.vertices[t.first as usize];
-                let second = self.vertices[t.second as usize];
-                let third = self.vertices[t.third as usize];
-                (first.min(second).min(third), first.max(second).max(third))
-            })
-            .collect::<Vec<_>>();
-        if source_triangles_aabb.is_empty() {
-            return Ok(self.clone());
-        }
-
-        let triangles_in_range = iter!(source_triangles_aabb)
-            .enumerate()
-            .filter_map(|(i, source_aabb)| {
-                let result = iter!(other_triangles_in_range)
-                    .filter_map(|(j, other_aabb)| {
-                        if aabb_collide(source_aabb, other_aabb) {
-                            Some(*j)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
-                if result.is_empty() {
-                    None
-                } else {
-                    Some((i, result))
-                }
-            })
-            .collect::<Vec<_>>();
-        if triangles_in_range.is_empty() {
-            return Ok(self.clone());
-        }
-
-        let triangles_segments = iter!(triangles_in_range)
-            .filter_map(|(i, o)| {
-                let t = &self.triangles[*i];
-                let a = [
-                    self.vertices[t.first as usize],
-                    self.vertices[t.second as usize],
-                    self.vertices[t.third as usize],
-                ];
-                let segments = into_iter!(o)
-                    .filter_map(|j| {
-                        let b = {
-                            let t = &other.triangles[*j];
-                            [
-                                other.vertices[t.first as usize],
-                                other.vertices[t.second as usize],
-                                other.vertices[t.third as usize],
-                            ]
-                        };
-                        NavVec3::triangles_intersection(a[0], a[1], a[2], b[0], b[1], b[2])
-                    })
-                    .collect::<Vec<_>>();
-                if segments.is_empty() {
-                    None
-                } else if segments.len() == 1 {
-                    Some((i, segments))
-                } else {
-                    let mut segment_connections = Vec::new();
-                    for (i, s1) in segments.iter().enumerate() {
-                        if let Some(r) = segments.iter().enumerate().find_map(|(j, s2)| {
-                            if i != j && (s2.0).0.same_as((s1.1).0) {
-                                Some((i, j))
-                            } else {
-                                None
-                            }
-                        }) {
-                            segment_connections.push(r);
-                        }
-                    }
-                    let start_index = (0..segments.len())
-                        .map(|i| {
-                            (
-                                i,
-                                segment_connections
-                                    .iter()
-                                    .filter(|(f, t)| i == *f || i == *t)
-                                    .count(),
-                            )
-                        })
-                        .find(|(i, c)| *c == 1 && segment_connections.iter().any(|(f, _)| f == i))
-                        .map(|v| v.0)
-                        .unwrap_or(0);
-                    let mut sorted = Vec::with_capacity(segments.len());
-                    sorted.push(segments[start_index]);
-                    let mut index = start_index;
-                    while sorted.len() < segments.len() {
-                        let found = segment_connections.iter().find(|(f, _)| *f == index);
-                        if let Some((_, to)) = found {
-                            index = *to;
-                            sorted.push(segments[index]);
-                        } else {
-                            break;
-                        }
-                    }
-                    Some((i, sorted))
-                }
-            })
-            .collect::<Vec<_>>();
-        if triangles_segments.is_empty() {
-            return Ok(self.clone());
-        }
-        println!("=== TRIANGLES SEGMENTS: {:#?}", triangles_segments);
-
-        // TODO: create isles of holes by connecting triangles segments and use that isles to find
-        // triangles inside them that are not cut, but have to be removed.
-
-        unimplemented!()
     }
 
     /// Nav mesh identifier.
@@ -891,8 +729,7 @@ impl NavMesh {
                     points.push(p);
                 }
                 Node::LevelChange(a, b, n) => {
-                    let next = nodes
-                        .iter()
+                    let next = iter!(nodes)
                         .skip(i + 1)
                         .find_map(|n| match n {
                             Node::Point(p) => Some(*p),

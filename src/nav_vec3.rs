@@ -1,21 +1,8 @@
-use crate::{nav_mesh::NavConnection, Scalar, ZERO_TRESHOLD};
+use crate::{Scalar, ZERO_TRESHOLD};
 use approx::{AbsDiffEq, RelativeEq, UlpsEq};
 use serde::{Deserialize, Serialize};
 use spade::PointN;
 use std::ops::{Add, Div, Mul, Neg, Sub};
-
-#[cfg(feature = "parallel")]
-macro_rules! into_iter {
-    ($v:expr) => {
-        $v.into_par_iter()
-    };
-}
-#[cfg(not(feature = "parallel"))]
-macro_rules! into_iter {
-    ($v:expr) => {
-        $v.into_iter()
-    };
-}
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -73,6 +60,11 @@ impl NavVec3 {
     #[inline]
     pub fn abs(self) -> Self {
         Self::new(self.x.abs(), self.y.abs(), self.z.abs())
+    }
+
+    #[inline]
+    pub fn lerp(self, other: Self, factor: Scalar) -> Self {
+        self + (other - self) * factor
     }
 
     #[inline]
@@ -217,116 +209,11 @@ impl NavVec3 {
         Some((p, u.normalize()))
     }
 
-    /// (from: (point, on edge connection), to: (point, on edge connection), normal)
-    pub fn triangles_intersection(
-        a1: Self,
-        b1: Self,
-        c1: Self,
-        a2: Self,
-        b2: Self,
-        c2: Self,
-    ) -> Option<(
-        (Self, Option<NavConnection>),
-        (Self, Option<NavConnection>),
-        Self,
-    )> {
-        let tab1 = (b1 - a1).normalize();
-        let tbc1 = (c1 - b1).normalize();
-        let n1 = tab1.cross(tbc1).normalize();
-        let tab2 = (b2 - a2).normalize();
-        let tbc2 = (c2 - b2).normalize();
-        let n2 = tab2.cross(tbc2).normalize();
-        let contacts = into_iter!([(a2, b2), (b2, c2), (c2, a2)])
-            .filter_map(|(from, to)| Self::raycast_plane(*from, *to, a1, n1))
-            .collect::<Vec<_>>();
-        let mut deduplicated = Vec::with_capacity(contacts.len());
-        'root: for i in 0..contacts.len() {
-            for j in (i + 1)..contacts.len() {
-                if (contacts[i] - contacts[j]).sqr_magnitude() < ZERO_TRESHOLD {
-                    continue 'root;
-                }
-            }
-            deduplicated.push(contacts[i]);
-        }
-        if deduplicated.len() != 2 {
-            return None;
-        }
-        let sb = deduplicated[0];
-        let se = deduplicated[1];
-        if !Self::does_line_crosses_triangle(sb, se, a1, b1, c1) {
-            return None;
-        }
-        let no = (n2 * 100.0).project_on_plane(a1, n1).normalize();
-        let clipped = into_iter!([(a1, b1, 0, 1), (b1, c1, 1, 2), (c1, a1, 2, 0)])
-            .filter_map(|(from, to, index_from, index_to)| {
-                let p = Self::raycast_line_exact(*from, *to, sb, se, no)?;
-                Some((p, NavConnection(*index_from, *index_to)))
-            })
-            .collect::<Vec<_>>();
-        let (b, e, n) = match clipped.len() {
-            2 => {
-                if (clipped[1].0 - clipped[0].0).sqr_magnitude() < ZERO_TRESHOLD {
-                    None
-                } else {
-                    Some((
-                        (clipped[0].0, Some(clipped[0].1)),
-                        (clipped[1].0, Some(clipped[1].1)),
-                        no,
-                    ))
-                }
-            }
-            1 => {
-                let (p, conn) = clipped[0];
-                let points = &[a1, b1, c1];
-                let pb = points[conn.0 as usize];
-                let pe = points[conn.1 as usize];
-                let n = (pe - pb).cross(n1).normalize();
-                let db = sb.distance_to_plane(pb, n);
-                let de = se.distance_to_plane(pb, n);
-                if db > de {
-                    if (p - se).sqr_magnitude() < ZERO_TRESHOLD {
-                        None
-                    } else {
-                        Some(((p, Some(conn)), (se, None), no))
-                    }
-                } else {
-                    if (p - sb).sqr_magnitude() < ZERO_TRESHOLD {
-                        None
-                    } else {
-                        Some(((sb, None), (p, Some(conn)), no))
-                    }
-                }
-            }
-            _ => Some(((sb, None), (se, None), no)),
-        }?;
-        if n.cross(e.0 - b.0).z >= 0.0 {
-            Some((b, e, n))
-        } else {
-            Some((e, b, n))
-        }
-    }
-
     pub fn is_line_between_points(from: Self, to: Self, a: Self, b: Self, normal: Self) -> bool {
         let n = (to - from).cross(normal);
         let sa = Self::side(n.dot(a - from));
         let sb = Self::side(n.dot(b - from));
         sa != sb
-    }
-
-    fn does_line_crosses_triangle(from: Self, to: Self, a: Self, b: Self, c: Self) -> bool {
-        let tab = (b - a).normalize();
-        let tbc = (c - b).normalize();
-        let tca = (a - c).normalize();
-        let n = tab.cross(tbc).normalize();
-        let nab = tab.cross(n);
-        let nbc = tbc.cross(n);
-        let nca = tca.cross(n);
-        (from.is_above_plane(a, -nab)
-            && from.is_above_plane(b, -nbc)
-            && from.is_above_plane(c, -nca))
-            || (to.is_above_plane(a, -nab)
-                && to.is_above_plane(b, -nbc)
-                && to.is_above_plane(c, -nca))
     }
 
     fn side(v: Scalar) -> i8 {
