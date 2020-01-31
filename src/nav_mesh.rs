@@ -589,6 +589,73 @@ impl NavMesh {
         query: NavQuery,
         mode: NavPathMode,
     ) -> Option<Vec<NavVec3>> {
+        self.find_path_custom(from, to, query, mode, |_, _, _| true)
+    }
+
+    /// Find shortest path on nav mesh between two points, providing custom filtering function.
+    ///
+    /// # Arguments
+    /// * `from` - query point from.
+    /// * `to` - query point to.
+    /// * `query` - query quality.
+    /// * `mode` - path finding quality.
+    /// * `filter` - closure that gives you a connection distance squared, first triangle index
+    ///   and second triangle index.
+    ///
+    /// # Returns
+    /// `Some` with path points on nav mesh if found or `None` otherwise.
+    ///
+    /// # Example
+    /// ```
+    /// use navmesh::*;
+    ///
+    /// let vertices = vec![
+    ///     (0.0, 0.0, 0.0).into(), // 0
+    ///     (1.0, 0.0, 0.0).into(), // 1
+    ///     (2.0, 0.0, 1.0).into(), // 2
+    ///     (0.0, 1.0, 0.0).into(), // 3
+    ///     (1.0, 1.0, 0.0).into(), // 4
+    ///     (2.0, 1.0, 1.0).into(), // 5
+    /// ];
+    /// let triangles = vec![
+    ///     (0, 1, 4).into(), // 0
+    ///     (4, 3, 0).into(), // 1
+    ///     (1, 2, 5).into(), // 2
+    ///     (5, 4, 1).into(), // 3
+    /// ];
+    ///
+    /// let mesh = NavMesh::new(vertices, triangles).unwrap();
+    /// let path = mesh
+    ///     .find_path_custom(
+    ///         (0.0, 1.0, 0.0).into(),
+    ///         (1.5, 0.25, 0.5).into(),
+    ///         NavQuery::Accuracy,
+    ///         NavPathMode::MidPoints,
+    ///         |_dist_sqr, _first_idx, _second_idx| true,
+    ///     )
+    ///     .unwrap();
+    /// assert_eq!(
+    ///     path.into_iter()
+    ///         .map(|v| (
+    ///             (v.x * 10.0) as i32,
+    ///             (v.y * 10.0) as i32,
+    ///             (v.z * 10.0) as i32,
+    ///         ))
+    ///         .collect::<Vec<_>>(),
+    ///     vec![(0, 10, 0), (10, 5, 0), (15, 2, 5),]
+    /// );
+    /// ```
+    pub fn find_path_custom<F>(
+        &self,
+        from: NavVec3,
+        to: NavVec3,
+        query: NavQuery,
+        mode: NavPathMode,
+        filter: F,
+    ) -> Option<Vec<NavVec3>>
+    where
+        F: FnMut(Scalar, usize, usize) -> bool,
+    {
         if from.same_as(to) {
             return None;
         }
@@ -596,7 +663,7 @@ impl NavMesh {
         let end = self.find_closest_triangle(to, query)?;
         let from = self.spatials[start].closest_point(from);
         let to = self.spatials[end].closest_point(to);
-        let (triangles, _) = self.find_path_triangles(start, end)?;
+        let (triangles, _) = self.find_path_triangles_custom(start, end, filter)?;
         if triangles.is_empty() {
             return None;
         } else if triangles.len() == 1 {
@@ -815,15 +882,75 @@ impl NavMesh {
     /// ```
     #[inline]
     pub fn find_path_triangles(&self, from: usize, to: usize) -> Option<(Vec<usize>, Scalar)> {
+        self.find_path_triangles_custom(from, to, |_, _, _| true)
+    }
+
+    /// Find shortest path on nav mesh between two points, providing custom filtering function.
+    ///
+    /// # Arguments
+    /// * `from` - query point from.
+    /// * `to` - query point to.
+    /// * `query` - query quality.
+    /// * `mode` - path finding quality.
+    /// * `filter` - closure that gives you a connection distance squared, first triangle index
+    ///   and second triangle index.
+    ///
+    /// # Returns
+    /// `Some` with path points on nav mesh and path length if found or `None` otherwise.
+    ///
+    /// # Example
+    /// ```
+    /// use navmesh::*;
+    ///
+    /// let vertices = vec![
+    ///     (0.0, 0.0, 0.0).into(), // 0
+    ///     (1.0, 0.0, 0.0).into(), // 1
+    ///     (2.0, 0.0, 1.0).into(), // 2
+    ///     (0.0, 1.0, 0.0).into(), // 3
+    ///     (1.0, 1.0, 0.0).into(), // 4
+    ///     (2.0, 1.0, 1.0).into(), // 5
+    /// ];
+    /// let triangles = vec![
+    ///     (0, 1, 4).into(), // 0
+    ///     (4, 3, 0).into(), // 1
+    ///     (1, 2, 5).into(), // 2
+    ///     (5, 4, 1).into(), // 3
+    /// ];
+    ///
+    /// let mesh = NavMesh::new(vertices, triangles).unwrap();
+    /// let path = mesh.find_path_triangles_custom(
+    ///     1,
+    ///     2,
+    ///     |_dist_sqr, _first_idx, _second_idx| true
+    /// ).unwrap().0;
+    /// assert_eq!(path, vec![1, 0, 3, 2]);
+    /// ```
+    #[inline]
+    pub fn find_path_triangles_custom<F>(
+        &self,
+        from: usize,
+        to: usize,
+        mut filter: F,
+    ) -> Option<(Vec<usize>, Scalar)>
+    where
+        F: FnMut(Scalar, usize, usize) -> bool,
+    {
         let to = self.nodes[to];
         astar(
             &self.graph,
             self.nodes[from],
             |n| n == to,
             |e| {
-                let a = self.areas[self.nodes_map[&e.source()]].cost;
-                let b = self.areas[self.nodes_map[&e.target()]].cost;
-                *e.weight() * a * b
+                let a = self.nodes_map[&e.source()];
+                let b = self.nodes_map[&e.target()];
+                let w = *e.weight();
+                if filter(w, a, b) {
+                    let a = self.areas[a].cost;
+                    let b = self.areas[b].cost;
+                    w * a * b
+                } else {
+                    std::f64::MAX
+                }
             },
             |_| 0.0,
         )

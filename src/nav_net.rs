@@ -209,6 +209,19 @@ impl NavNet {
     }
 
     pub fn find_path(&self, from: NavVec3, to: NavVec3) -> Option<Vec<NavVec3>> {
+        self.find_path_custom(from, to, |_, _, _| true)
+    }
+
+    // filter params: connection distance sqr, first vertex index, second vertex index.
+    pub fn find_path_custom<F>(
+        &self,
+        from: NavVec3,
+        to: NavVec3,
+        mut filter: F,
+    ) -> Option<Vec<NavVec3>>
+    where
+        F: FnMut(Scalar, usize, usize) -> bool,
+    {
         let start_index = self.find_closest_connection(from)?;
         let end_index = self.find_closest_connection(to)?;
         let start_connection = self.connections[start_index];
@@ -245,9 +258,16 @@ impl NavNet {
             start_node,
             |n| n == end_node,
             |e| {
-                let a = self.costs[self.nodes_map[&e.source()]];
-                let b = self.costs[self.nodes_map[&e.target()]];
-                *e.weight() * a * b
+                let a = self.nodes_map[&e.source()];
+                let b = self.nodes_map[&e.target()];
+                let w = *e.weight();
+                if filter(w, a, b) {
+                    let a = self.costs[a];
+                    let b = self.costs[b];
+                    w * a * b
+                } else {
+                    std::f64::MAX
+                }
             },
             |_| 0.0,
         )?
