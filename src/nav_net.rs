@@ -86,8 +86,11 @@ pub struct NavNet {
 
 impl NavNet {
     pub fn new(vertices: Vec<NavVec3>, connections: Vec<NavConnection>) -> NavResult<Self> {
-        let origin =
-            iter!(vertices).fold(NavVec3::default(), |a, v| a + *v) / vertices.len() as Scalar;
+        let origin = vertices
+            .iter()
+            .cloned()
+            .fold(NavVec3::default(), |a, v| a + v)
+            / vertices.len() as Scalar;
 
         let distances = iter!(connections)
             .enumerate()
@@ -113,7 +116,8 @@ impl NavNet {
         graph.extend_with_edges(
             iter!(connections)
                 .enumerate()
-                .map(|(i, conn)| (nodes[conn.0 as usize], nodes[conn.1 as usize], distances[i])),
+                .map(|(i, conn)| (nodes[conn.0 as usize], nodes[conn.1 as usize], distances[i]))
+                .collect::<Vec<_>>(),
         );
         let nodes_map = iter!(nodes).enumerate().map(|(i, n)| (*n, i)).collect();
 

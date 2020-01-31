@@ -269,8 +269,11 @@ impl NavMesh {
     /// let mesh = NavMesh::new(vertices, triangles).unwrap();
     /// ```
     pub fn new(vertices: Vec<NavVec3>, triangles: Vec<NavTriangle>) -> NavResult<Self> {
-        let origin =
-            iter!(vertices).fold(NavVec3::default(), |a, v| a + *v) / vertices.len() as Scalar;
+        let origin = vertices
+            .iter()
+            .cloned()
+            .fold(NavVec3::default(), |a, v| a + v)
+            / vertices.len() as Scalar;
 
         let areas = iter!(triangles)
             .enumerate()
@@ -317,7 +320,7 @@ impl NavMesh {
 
         // {edge: [triangle index]}
         let mut edges = HashMap::<NavConnection, Vec<usize>>::with_capacity(triangles.len() * 3);
-        for (index, triangle) in iter!(triangles).enumerate() {
+        for (index, triangle) in triangles.iter().enumerate() {
             let edge_a = NavConnection(triangle.first, triangle.second);
             let edge_b = NavConnection(triangle.second, triangle.third);
             let edge_c = NavConnection(triangle.third, triangle.first);
@@ -365,7 +368,8 @@ impl NavMesh {
             .collect::<Vec<_>>();
         graph.extend_with_edges(
             iter!(connections)
-                .map(|(conn, (w, _))| (nodes[conn.0 as usize], nodes[conn.1 as usize], w)),
+                .map(|(conn, (w, _))| (nodes[conn.0 as usize], nodes[conn.1 as usize], w))
+                .collect::<Vec<_>>(),
         );
         let nodes_map = iter!(nodes).enumerate().map(|(i, n)| (*n, i)).collect();
 
@@ -439,7 +443,9 @@ impl NavMesh {
         let shifted = iter!(self.vertices)
             .enumerate()
             .map(|(i, v)| {
-                let (mut n, c) = iter!(self.triangles)
+                let (mut n, c) = self
+                    .triangles
+                    .iter()
                     .enumerate()
                     .filter_map(|(j, t)| {
                         if t.first == i as u32 || t.second == i as u32 || t.third == i as u32 {
@@ -690,7 +696,8 @@ impl NavMesh {
                     points.push(p);
                 }
                 Node::LevelChange(a, b, n) => {
-                    let next = iter!(nodes)
+                    let next = nodes
+                        .iter()
                         .skip(i + 1)
                         .find_map(|n| match n {
                             Node::Point(p) => Some(*p),
