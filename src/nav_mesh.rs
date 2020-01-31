@@ -1,14 +1,10 @@
-use crate::{NavVec3, Scalar, ZERO_TRESHOLD};
+use crate::{Error, NavConnection, NavResult, NavVec3, Scalar, ZERO_TRESHOLD};
 use petgraph::{algo::astar, graph::NodeIndex, visit::EdgeRef, Graph, Undirected};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use spade::{rtree::RTree, BoundingRect, SpatialObject};
-use std::{
-    collections::HashMap,
-    hash::{Hash, Hasher},
-    result::Result as StdResult,
-};
+use std::collections::HashMap;
 use typid::ID;
 
 #[cfg(feature = "parallel")]
@@ -38,21 +34,6 @@ macro_rules! into_iter {
 
 /// Nav mash identifier.
 pub type NavMeshID = ID<NavMesh>;
-
-/// Error data.
-#[derive(Debug, Clone)]
-pub enum Error {
-    /// Trying to construct triangle with vertice index out of vertices list.
-    /// (triangle index, local vertice index, global vertice index)
-    TriangleVerticeIndexOutOfBounds(u32, u8, u32),
-    /// Could not serialize NavMesh. Contains serialization error string.
-    CouldNotSerializeNavMesh(String),
-    /// Could not deserialize NavMesh. Contains deserialization error string.
-    CouldNotDeserializeNavMesh(String),
-}
-
-/// Result data.
-pub type NavResult<T> = StdResult<T, Error>;
 
 /// Nav mesh triangle description - lists used vertices indices.
 #[repr(C)]
@@ -129,30 +110,8 @@ impl NavArea {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, Serialize, Deserialize)]
-pub struct NavConnection(pub u32, pub u32);
-
-impl Hash for NavConnection {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        let first = self.0.min(self.1);
-        let second = self.0.max(self.1);
-        first.hash(state);
-        second.hash(state);
-    }
-}
-
-impl PartialEq for NavConnection {
-    fn eq(&self, other: &Self) -> bool {
-        let first = self.0.min(self.1);
-        let second = self.0.max(self.1);
-        let ofirst = other.0.min(other.1);
-        let osecond = other.0.max(other.1);
-        first == ofirst && second == osecond
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct NavSpatialObject {
+pub struct NavSpatialObject {
     pub index: usize,
     pub a: NavVec3,
     pub b: NavVec3,
@@ -312,6 +271,7 @@ impl NavMesh {
     pub fn new(vertices: Vec<NavVec3>, triangles: Vec<NavTriangle>) -> NavResult<Self> {
         let origin =
             iter!(vertices).fold(NavVec3::default(), |a, v| a + *v) / vertices.len() as Scalar;
+
         let areas = iter!(triangles)
             .enumerate()
             .map(|(i, triangle)| {
@@ -512,6 +472,7 @@ impl NavMesh {
         self.id
     }
 
+    /// Nav mesh origin point.
     #[inline]
     pub fn origin(&self) -> NavVec3 {
         self.origin

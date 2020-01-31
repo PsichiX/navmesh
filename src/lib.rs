@@ -3,12 +3,59 @@
 extern crate approx;
 
 mod nav_mesh;
+mod nav_net;
 mod nav_vec3;
 
 pub use nav_mesh::*;
+pub use nav_net::*;
 pub use nav_vec3::*;
+use serde::{Deserialize, Serialize};
+use std::{
+    hash::{Hash, Hasher},
+    result::Result as StdResult,
+};
 
 pub type Scalar = f64;
+
+/// Error data.
+#[derive(Debug, Clone)]
+pub enum Error {
+    /// Trying to construct triangle with vertice index out of vertices list.
+    /// (triangle index, local vertice index, global vertice index)
+    TriangleVerticeIndexOutOfBounds(u32, u8, u32),
+    /// Trying to construct connection with vertice index out of vertices list.
+    /// (connection index, local vertice index, global vertice index)
+    ConnectionVerticeIndexOutOfBounds(u32, u8, u32),
+    /// Could not serialize NavMesh. Contains serialization error string.
+    CouldNotSerializeNavMesh(String),
+    /// Could not deserialize NavMesh. Contains deserialization error string.
+    CouldNotDeserializeNavMesh(String),
+}
+
+/// Result data.
+pub type NavResult<T> = StdResult<T, Error>;
+
+#[derive(Debug, Default, Copy, Clone, Eq, Serialize, Deserialize)]
+pub struct NavConnection(pub u32, pub u32);
+
+impl Hash for NavConnection {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let first = self.0.min(self.1);
+        let second = self.0.max(self.1);
+        first.hash(state);
+        second.hash(state);
+    }
+}
+
+impl PartialEq for NavConnection {
+    fn eq(&self, other: &Self) -> bool {
+        let first = self.0.min(self.1);
+        let second = self.0.max(self.1);
+        let ofirst = other.0.min(other.1);
+        let osecond = other.0.max(other.1);
+        first == ofirst && second == osecond
+    }
+}
 
 pub(crate) const ZERO_TRESHOLD: Scalar = 1e-6;
 
