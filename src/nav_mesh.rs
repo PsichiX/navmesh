@@ -5,6 +5,10 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use spade::{rtree::RTree, BoundingRect, SpatialObject};
 use std::collections::HashMap;
+#[cfg(not(feature = "scalar64"))]
+use std::f32::MAX as SCALAR_MAX;
+#[cfg(feature = "scalar64")]
+use std::f64::MAX as SCALAR_MAX;
 use typid::ID;
 
 #[cfg(feature = "parallel")]
@@ -949,7 +953,7 @@ impl NavMesh {
                     let b = self.areas[b].cost;
                     w * a * b
                 } else {
-                    std::f64::MAX
+                    SCALAR_MAX
                 }
             },
             |_| 0.0,

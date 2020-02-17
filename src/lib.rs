@@ -15,7 +15,10 @@ use std::{
     result::Result as StdResult,
 };
 
+#[cfg(feature = "scalar64")]
 pub type Scalar = f64;
+#[cfg(not(feature = "scalar64"))]
+pub type Scalar = f32;
 
 /// Error data.
 #[derive(Debug, Clone)]

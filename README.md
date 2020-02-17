@@ -1,11 +1,11 @@
-# NavMesh
+# NavMesh ![travis-ci status](https://travis-ci.org/PsichiX/navmesh.svg?branch=master) ![crates-io version](https://raster.shields.io/crates/v/navmesh.png)
 #### Nav-Mesh path finder for Rust
 
 ## Installation
 Cargo.toml
 ```toml
 [dependencies]
-navmesh = "0.7"
+navmesh = "0.8"
 ```
 
 ## Example
