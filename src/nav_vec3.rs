@@ -225,6 +225,24 @@ impl NavVec3 {
     }
 }
 
+#[cfg(feature = "bevy")]
+impl From<bevy::math::Vec3> for NavVec3 {
+    fn from(value: bevy::math::Vec3) -> Self {
+        Self {
+            x: value.x,
+            y: value.y,
+            z: value.z,
+        }
+    }
+}
+
+#[cfg(feature = "bevy")]
+impl Into<bevy::math::Vec3> for NavVec3 {
+    fn into(self) -> bevy::math::Vec3 {
+        bevy::math::Vec3::new(self.x, self.y, self.z)
+    }
+}
+
 impl From<(Scalar, Scalar, Scalar)> for NavVec3 {
     fn from(value: (Scalar, Scalar, Scalar)) -> Self {
         Self {
