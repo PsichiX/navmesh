@@ -286,7 +286,7 @@ impl NavNet {
                 let a = *iter.next()?;
                 let b = *iter.next()?;
                 let t = start_point.project(a, b);
-                if t >= 0.0 && t <= 1.0 {
+                if (0.0..=1.0).contains(&t) {
                     points[0] = start_point;
                 } else {
                     points.insert(0, start_point);
@@ -297,7 +297,7 @@ impl NavNet {
                 let a = *iter.next()?;
                 let b = *iter.next()?;
                 let t = end_point.project(a, b);
-                if t >= 0.0 && t <= 1.0 {
+                if (0.0..=1.0).contains(&t) {
                     *points.last_mut()? = end_point;
                 } else {
                     points.push(end_point);

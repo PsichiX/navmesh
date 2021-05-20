@@ -142,7 +142,7 @@ impl NavVec3 {
     ) -> Option<Self> {
         let p = Self::raycast_plane(from, to, a, normal)?;
         let t = p.project(a, b);
-        if t >= 0.0 && t <= 1.0 {
+        if (0.0..=1.0).contains(&t) {
             Some(Self::unproject(a, b, t))
         } else {
             None
@@ -451,5 +451,44 @@ impl UlpsEq for NavVec3 {
         Scalar::ulps_eq(&self.x, &other.x, epsilon, max_ulps)
             && Scalar::ulps_eq(&self.y, &other.y, epsilon, max_ulps)
             && Scalar::ulps_eq(&self.z, &other.z, epsilon, max_ulps)
+    }
+}
+
+#[cfg(feature = "mint")]
+impl From<mint::Vector3<Scalar>> for NavVec3 {
+    fn from(v: mint::Vector3<Scalar>) -> Self {
+        Self::new(v.x, v.y, v.z)
+    }
+}
+
+#[cfg(feature = "mint")]
+impl From<NavVec3> for mint::Vector3<Scalar> {
+    fn from(v: NavVec3) -> Self {
+        Self {
+            x: v.x,
+            y: v.y,
+            z: v.z,
+        }
+    }
+}
+
+#[cfg(feature = "mint")]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mint() {
+        let v = NavVec3::new(0.0, 1.0, -1.0);
+        let _f = mint::Vector3::<Scalar>::from(v);
+        let _t: mint::Vector3<Scalar> = v.into();
+
+        let v = mint::Vector3::<Scalar> {
+            x: 0.0,
+            y: 1.0,
+            z: -1.0,
+        };
+        let _f = NavVec3::from(v);
+        let _t: NavVec3 = v.into();
     }
 }

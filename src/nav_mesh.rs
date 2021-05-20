@@ -168,11 +168,11 @@ impl NavSpatialObject {
             return self.b;
         } else if pbc > 1.0 && pca < 0.0 {
             return self.c;
-        } else if pab >= 0.0 && pab <= 1.0 && !point.is_above_plane(self.a, self.dab) {
+        } else if (0.0..=1.0).contains(&pab) && !point.is_above_plane(self.a, self.dab) {
             return NavVec3::unproject(self.a, self.b, pab);
-        } else if pbc >= 0.0 && pbc <= 1.0 && !point.is_above_plane(self.b, self.dbc) {
+        } else if (0.0..=1.0).contains(&pbc) && !point.is_above_plane(self.b, self.dbc) {
             return NavVec3::unproject(self.b, self.c, pbc);
-        } else if pca >= 0.0 && pca <= 1.0 && !point.is_above_plane(self.c, self.dca) {
+        } else if (0.0..=1.0).contains(&pca) && !point.is_above_plane(self.c, self.dca) {
             return NavVec3::unproject(self.c, self.a, pca);
         }
         point.project_on_plane(self.a, self.normal)
@@ -720,20 +720,20 @@ impl NavMesh {
                 self.connections[&NavConnection(triplets[1] as u32, triplets[2] as u32)].1;
             let c = self.vertices[c as usize];
             let d = self.vertices[d as usize];
-            let n = self.spatials[triplets[1]].normal();
+            let normal = self.spatials[triplets[1]].normal();
             let old_last_normal = last_normal;
-            last_normal = n;
-            if !NavVec3::is_line_between_points(start, c, a, b, n)
-                || !NavVec3::is_line_between_points(start, d, a, b, n)
+            last_normal = normal;
+            if !NavVec3::is_line_between_points(start, c, a, b, normal)
+                || !NavVec3::is_line_between_points(start, d, a, b, normal)
             {
                 let da = (start - a).sqr_magnitude();
                 let db = (start - b).sqr_magnitude();
                 start = if da < db { a } else { b };
                 nodes.push(Node::Point(start));
-            } else if old_last_normal.dot(n) < 1.0 - ZERO_TRESHOLD {
-                let n = self.spatials[triplets[0]].normal();
-                let n = (b - a).normalize().cross(n);
-                nodes.push(Node::LevelChange(a, b, n));
+            } else if old_last_normal.dot(normal) < 1.0 - ZERO_TRESHOLD {
+                let normal = self.spatials[triplets[0]].normal();
+                let normal = (b - a).normalize().cross(normal);
+                nodes.push(Node::LevelChange(a, b, normal));
             }
         }
         {
@@ -811,10 +811,10 @@ impl NavMesh {
             let a = self.vertices[a as usize];
             let b = self.vertices[b as usize];
             let point = (a + b) * 0.5;
-            let n = self.spatials[triplets[1]].normal();
+            let normal = self.spatials[triplets[1]].normal();
             let old_last_normal = last_normal;
-            last_normal = n;
-            if old_last_normal.dot(n) < 1.0 - ZERO_TRESHOLD {
+            last_normal = normal;
+            if old_last_normal.dot(normal) < 1.0 - ZERO_TRESHOLD {
                 start = point;
                 points.push(start);
             } else {
@@ -823,7 +823,7 @@ impl NavMesh {
                 let c = self.vertices[c as usize];
                 let d = self.vertices[d as usize];
                 let end = (c + d) * 0.5;
-                if !NavVec3::is_line_between_points(start, end, a, b, n) {
+                if !NavVec3::is_line_between_points(start, end, a, b, normal) {
                     start = point;
                     points.push(start);
                 }
