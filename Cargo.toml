@@ -1,10 +1,10 @@
 [package]
 name = "navmesh"
-version = "0.8.3"
+version = "0.9.0"
 authors = ["Patryk 'PsichiX' Budzynski <psichix@gmail.com>"]
-edition = "2018"
-description = "Nav-Mesh navigation system"
-license-file = "./LICENSE"
+edition = "2021"
+description = "Nav-Mesh, Nav-Grid and Nav-Net navigation system"
+license = "MIT OR Apache-2.0"
 homepage = "https://github.com/PsichiX/navmesh"
 repository = "https://github.com/PsichiX/navmesh"
 documentation = "https://docs.rs/navmesh"
@@ -17,9 +17,9 @@ convert = ["mint"]
 
 [dependencies]
 typid  = "1"
-petgraph = { version = "0.5", features = ["serde-1"] }
+petgraph = { version = "0.6", features = ["serde-1"] }
 spade = { version = "1.8", features = ["serde_serialize"] }
 serde = { version = "1", features = ["derive"] }
 rayon = { version = "1.5", optional = true }
-approx = "0.4"
+approx = "0.5"
 mint = { version = "0.5", features = ["serde"], optional = true }

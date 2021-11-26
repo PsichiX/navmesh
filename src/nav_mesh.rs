@@ -958,7 +958,7 @@ impl NavMesh {
             },
             |_| 0.0,
         )
-        .map(|(c, v)| (iter!(v).map(|v| self.nodes_map[&v]).collect(), c))
+        .map(|(c, v)| (iter!(v).map(|v| self.nodes_map[v]).collect(), c))
     }
 
     /// Find closest triangle on nav mesh closest to given point.
@@ -1035,7 +1035,7 @@ impl NavMesh {
                         let (p, s) = Self::point_on_line(pair[0], pair[1], point);
                         (dist + s, (p - point).sqr_magnitude())
                     })
-                    .min_by(|(_, a), (_, b)| a.partial_cmp(&b).unwrap())
+                    .min_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
                     .unwrap()
                     .0
             }

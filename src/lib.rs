@@ -2,13 +2,13 @@
 #[macro_use]
 extern crate approx;
 
+mod nav_grid;
 mod nav_mesh;
 mod nav_net;
 mod nav_vec3;
 
-pub use nav_mesh::*;
-pub use nav_net::*;
-pub use nav_vec3::*;
+pub use crate::{nav_grid::*, nav_mesh::*, nav_net::*, nav_vec3::*};
+
 use serde::{Deserialize, Serialize};
 use std::{
     hash::{Hash, Hasher},
@@ -33,6 +33,12 @@ pub enum Error {
     CouldNotSerializeNavMesh(String),
     /// Could not deserialize NavMesh. Contains deserialization error string.
     CouldNotDeserializeNavMesh(String),
+    /// Trying to use cells container with size not matching cols and rows count.
+    /// (cells count, cols count, rows count)
+    CellsCountDoesNotMatchColsRows(usize, usize, usize),
+    /// Either cols or rows count is zero.
+    /// (cols count, rows count)
+    EmptyCells(usize, usize),
 }
 
 /// Result data.
@@ -724,5 +730,18 @@ mod tests {
         for (a, b) in expected.iter().zip(thickened.vertices().iter()) {
             assert_relative_eq!(a, b);
         }
+    }
+
+    #[test]
+    fn test_grid() {
+        let grid = NavGrid::new(
+            3,
+            3,
+            vec![true, true, true, true, false, true, true, true, true],
+        )
+        .unwrap();
+        let path = grid.find_path((0, 0), (1, 2)).unwrap();
+        assert_eq!(path, vec![(0, 0), (0, 1), (0, 2), (1, 2)]);
+        assert_eq!(grid.find_path((0, 0), (1, 1)), None);
     }
 }
