@@ -39,6 +39,9 @@ pub enum Error {
     /// Either cols or rows count is zero.
     /// (cols count, rows count)
     EmptyCells(usize, usize),
+    /// Trying to use cell coordinate out of bounds.
+    /// (col, row, cols count, rows count)
+    InvalidCellCoordinate(usize, usize, usize, usize),
 }
 
 /// Result data.
@@ -743,5 +746,44 @@ mod tests {
         let path = grid.find_path((0, 0), (1, 2)).unwrap();
         assert_eq!(path, vec![(0, 0), (0, 1), (0, 2), (1, 2)]);
         assert_eq!(grid.find_path((0, 0), (1, 1)), None);
+
+        let grid = NavGrid::with_connections(
+            2,
+            2,
+            vec![
+                NavGridConnection {
+                    from: (0, 0),
+                    to: (1, 0),
+                },
+                NavGridConnection {
+                    from: (1, 0),
+                    to: (1, 1),
+                },
+                NavGridConnection {
+                    from: (1, 1),
+                    to: (0, 1),
+                },
+                NavGridConnection {
+                    from: (0, 1),
+                    to: (0, 0),
+                },
+            ],
+        )
+        .unwrap();
+        let path = grid.find_path((0, 0), (0, 1)).unwrap();
+        assert_eq!(path, vec![(0, 0), (1, 0), (1, 1), (0, 1)]);
+
+        let grid = NavFreeGrid::new(vec![
+            NavFreeGridConnection {
+                from: (0, 0),
+                to: (0, 2),
+            },
+            NavFreeGridConnection {
+                from: (0, 2),
+                to: (-1, -1),
+            },
+        ]);
+        let path = grid.find_path((0, 0), (-1, -1)).unwrap();
+        assert_eq!(path, vec![(0, 0), (0, 2), (-1, -1)]);
     }
 }

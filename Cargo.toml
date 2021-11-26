@@ -1,6 +1,6 @@
 [package]
 name = "navmesh"
-version = "0.9.0"
+version = "0.10.0"
 authors = ["Patryk 'PsichiX' Budzynski <psichix@gmail.com>"]
 edition = "2021"
 description = "Nav-Mesh, Nav-Grid and Nav-Net navigation system"
