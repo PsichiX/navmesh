@@ -1,5 +1,10 @@
 use crate::Scalar;
-use petgraph::{algo::astar, graph::NodeIndex, visit::EdgeRef, Directed, Graph};
+use petgraph::{
+    algo::{astar, tarjan_scc},
+    graph::NodeIndex,
+    visit::EdgeRef,
+    Directed, Graph,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 #[cfg(not(feature = "scalar64"))]
 use std::f32::MAX as SCALAR_MAX;
@@ -201,6 +206,18 @@ where
                 .filter_map(|n| self.portal(self.nodes_map[&n]))
                 .collect::<Vec<_>>(),
         ))
+    }
+
+    pub fn find_islands(&self) -> Vec<Vec<&NavIslandPortal<Island, Portal>>> {
+        tarjan_scc(&self.graph)
+            .into_iter()
+            .map(|v| {
+                v.into_iter()
+                    .filter_map(|n| self.nodes_map.get(&n).and_then(|i| self.portal(*i)))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty())
+            .collect()
     }
 
     pub fn index(&self, portal: &NavIslandPortal<Island, Portal>) -> Option<usize> {

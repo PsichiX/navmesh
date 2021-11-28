@@ -1,5 +1,10 @@
 use crate::{Error, NavConnection, NavResult, NavVec3, Scalar};
-use petgraph::{algo::astar, graph::NodeIndex, visit::EdgeRef, Graph, Undirected};
+use petgraph::{
+    algo::{astar, tarjan_scc},
+    graph::NodeIndex,
+    visit::EdgeRef,
+    Graph, Undirected,
+};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -305,5 +310,17 @@ impl NavNet {
             }
         }
         Some(points)
+    }
+
+    pub fn find_islands(&self) -> Vec<Vec<NavVec3>> {
+        tarjan_scc(&self.graph)
+            .into_iter()
+            .map(|v| {
+                v.into_iter()
+                    .filter_map(|n| self.nodes_map.get(&n).map(|i| self.vertices[*i]))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty())
+            .collect()
     }
 }

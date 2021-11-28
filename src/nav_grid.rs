@@ -1,5 +1,10 @@
 use crate::{Error, NavResult, Scalar};
-use petgraph::{algo::astar, graph::NodeIndex, visit::EdgeRef, Directed, Graph, Undirected};
+use petgraph::{
+    algo::{astar, tarjan_scc},
+    graph::NodeIndex,
+    visit::EdgeRef,
+    Directed, Graph, Undirected,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 #[cfg(not(feature = "scalar64"))]
@@ -258,6 +263,18 @@ impl NavGrid {
         )
     }
 
+    pub fn find_islands(&self) -> Vec<Vec<(usize, usize)>> {
+        tarjan_scc(&self.graph)
+            .into_iter()
+            .map(|v| {
+                v.into_iter()
+                    .filter_map(|n| self.nodes_map.get(&n).and_then(|i| self.coord(*i)))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty())
+            .collect()
+    }
+
     pub fn index(&self, col: usize, row: usize) -> Option<usize> {
         if col < self.cols && row < self.rows {
             Some(row * self.cols + col)
@@ -412,6 +429,18 @@ impl NavFreeGrid {
                 .filter_map(|n| self.coord(self.nodes_map[&n]))
                 .collect::<Vec<_>>(),
         )
+    }
+
+    pub fn find_islands(&self) -> Vec<Vec<(isize, isize)>> {
+        tarjan_scc(&self.graph)
+            .into_iter()
+            .map(|v| {
+                v.into_iter()
+                    .filter_map(|n| self.nodes_map.get(&n).and_then(|i| self.coord(*i)))
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty())
+            .collect()
     }
 
     pub fn index(&self, col: isize, row: isize) -> Option<usize> {

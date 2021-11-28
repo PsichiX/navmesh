@@ -790,6 +790,21 @@ mod tests {
         let path = grid.find_path((0, 0), (0, 1)).unwrap();
         assert_eq!(path, vec![(0, 0), (1, 0), (1, 1), (0, 1)]);
 
+        let grid = NavGrid::new(
+            3,
+            3,
+            vec![true, true, true, false, false, false, true, true, true],
+        )
+        .unwrap();
+        let mut islands = grid.find_islands();
+        for island in &mut islands {
+            island.sort();
+        }
+        assert_eq!(
+            islands,
+            vec![vec![(0, 0), (1, 0), (2, 0)], vec![(0, 2), (1, 2), (2, 2)]]
+        );
+
         let grid = NavFreeGrid::new(vec![
             NavFreeGridConnection {
                 from: (0, 0),

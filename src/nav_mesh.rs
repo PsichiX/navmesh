@@ -1,5 +1,10 @@
 use crate::{Error, NavConnection, NavResult, NavVec3, Scalar, ZERO_TRESHOLD};
-use petgraph::{algo::astar, graph::NodeIndex, visit::EdgeRef, Graph, Undirected};
+use petgraph::{
+    algo::{astar, tarjan_scc},
+    graph::NodeIndex,
+    visit::EdgeRef,
+    Graph, Undirected,
+};
 #[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -959,6 +964,18 @@ impl NavMesh {
             |_| 0.0,
         )
         .map(|(c, v)| (iter!(v).map(|v| self.nodes_map[v]).collect(), c))
+    }
+
+    pub fn find_triangle_islands(&self) -> Vec<Vec<usize>> {
+        tarjan_scc(&self.graph)
+            .into_iter()
+            .map(|v| {
+                v.into_iter()
+                    .filter_map(|n| self.nodes_map.get(&n).copied())
+                    .collect::<Vec<_>>()
+            })
+            .filter(|v| !v.is_empty())
+            .collect()
     }
 
     /// Find closest triangle on nav mesh closest to given point.
