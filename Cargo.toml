@@ -1,9 +1,9 @@
 [package]
 name = "navmesh"
-version = "0.10.0"
+version = "0.11.0"
 authors = ["Patryk 'PsichiX' Budzynski <psichix@gmail.com>"]
 edition = "2021"
-description = "Nav-Mesh, Nav-Grid and Nav-Net navigation system"
+description = "NavMesh, NavNet, NavGrid, NavFreeGrid and NavIslands navigation system"
 license = "MIT OR Apache-2.0"
 homepage = "https://github.com/PsichiX/navmesh"
 repository = "https://github.com/PsichiX/navmesh"
