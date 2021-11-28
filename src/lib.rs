@@ -77,6 +77,22 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_send_sync() {
+        fn foo<T>()
+        where
+            T: Send + Sync,
+        {
+            println!("{:?} is Send + Sync", std::any::type_name::<T>());
+        }
+
+        foo::<NavMesh>();
+        foo::<NavNet>();
+        foo::<NavGrid>();
+        foo::<NavFreeGrid>();
+        foo::<NavIslands<(), ()>>();
+    }
+
+    #[test]
     fn test_raycast() {
         assert_eq!(
             NavVec3::raycast_plane(
