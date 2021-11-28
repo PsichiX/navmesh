@@ -3,11 +3,12 @@
 extern crate approx;
 
 mod nav_grid;
+mod nav_islands;
 mod nav_mesh;
 mod nav_net;
 mod nav_vec3;
 
-pub use crate::{nav_grid::*, nav_mesh::*, nav_net::*, nav_vec3::*};
+pub use crate::{nav_grid::*, nav_islands::*, nav_mesh::*, nav_net::*, nav_vec3::*};
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -785,5 +786,53 @@ mod tests {
         ]);
         let path = grid.find_path((0, 0), (-1, -1)).unwrap();
         assert_eq!(path, vec![(0, 0), (0, 2), (-1, -1)]);
+    }
+
+    #[test]
+    fn test_islands() {
+        let grid_a = NavGrid::new(2, 2, vec![true, true, true, false]).unwrap();
+        let grid_b = NavGrid::new(2, 2, vec![true, true, false, true]).unwrap();
+        let island_a = NavIslandPortal {
+            island: grid_a.id(),
+            portal: None,
+        };
+        let island_a_portal = NavIslandPortal {
+            island: grid_a.id(),
+            portal: Some((1, 0)),
+        };
+        let island_b_portal = NavIslandPortal {
+            island: grid_b.id(),
+            portal: Some((0, 0)),
+        };
+        let island_b = NavIslandPortal {
+            island: grid_b.id(),
+            portal: None,
+        };
+        let islands = NavIslands::new(
+            vec![
+                NavIslandsConnection {
+                    from: island_a.clone(),
+                    to: island_a_portal.clone(),
+                    distance: 1.0,
+                },
+                NavIslandsConnection {
+                    from: island_a_portal.clone(),
+                    to: island_b_portal.clone(),
+                    distance: 0.0,
+                },
+                NavIslandsConnection {
+                    from: island_b_portal.clone(),
+                    to: island_b.clone(),
+                    distance: 1.0,
+                },
+            ],
+            true,
+        );
+        let (distance, path) = islands.find_path(&island_a, &island_b).unwrap();
+        assert_eq!(
+            path,
+            vec![&island_a, &island_a_portal, &island_b_portal, &island_b]
+        );
+        assert!((distance - 2.0).abs() < 1.0e-6);
     }
 }
