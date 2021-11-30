@@ -145,13 +145,11 @@ impl NavGrid {
         let nodes = (0..count)
             .map(|index| {
                 let coord = (index % cols, index / cols);
-                if coord.0 >= cols
-                    && coord.1 >= rows
-                    && connections.iter().any(|c| c.from == coord || c.to == coord)
-                {
-                    return None;
+                if connections.iter().any(|c| c.from == coord || c.to == coord) {
+                    Some(graph.add_node(()))
+                } else {
+                    None
                 }
-                Some(graph.add_node(()))
             })
             .collect::<Vec<_>>();
         for connection in connections {
