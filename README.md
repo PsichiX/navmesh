@@ -47,3 +47,6 @@ assert_eq!(
     vec![(0, 10, 0), (10, 5, 0), (15, 2, 5),]
 );
 ```
+
+## Web assembly
+To use Web Assembly support enable the `web` feature flag.
