@@ -1,6 +1,6 @@
 [package]
 name = "navmesh"
-version = "0.12.1"
+version = "0.13.0"
 authors = ["Patryk 'PsichiX' Budzynski <psichix@gmail.com>"]
 edition = "2021"
 description = "NavMesh, NavNet, NavGrid, NavFreeGrid and NavIslands navigation system"
@@ -14,12 +14,13 @@ readme = "./README.md"
 parallel = ["rayon"]
 scalar64 = []
 convert = ["mint"]
+web = ["typid/web"]
 
 [dependencies]
-typid  = "1"
+typid  = "1.1.1"
 petgraph = { version = "0.6", features = ["serde-1"] }
 spade = { version = "1.8", features = ["serde_serialize"] }
 serde = { version = "1", features = ["derive"] }
 rayon = { version = "1.5", optional = true }
-approx = "0.5"
+approx = "0.5.1"
 mint = { version = "0.5", features = ["serde"], optional = true }
